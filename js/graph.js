@@ -228,6 +228,7 @@ export class Graph {
     this.plot(f, (a, b) => { const s = fp((a + b) / 2); return s > 1e-12 ? COLORS.inc : s < -1e-12 ? COLORS.dec : COLORS.flat; }, 3);
     // critical points
     ctx.font = '600 12px system-ui, sans-serif';
+    const placed = [];
     for (const p of points) {
       if (!isFinite(p.y)) continue;
       const X = this.sx(p.x), Y = this.sy(p.y);
@@ -236,7 +237,12 @@ export class Graph {
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
       const label = `${p.type === 'max' ? 'local max' : p.type === 'min' ? 'local min' : 'critical pt'} (${fmtNum(p.x)}, ${fmtNum(p.y)})`;
       const above = p.type !== 'min';
-      this.label(label, X, above ? Y - 12 : Y + 20);
+      // crowded points keep their dots but skip labels that would overlap
+      const LY = above ? Y - 12 : Y + 20, w = ctx.measureText(label).width + 10;
+      const LX = Math.min(Math.max(X, w / 2 + 2), this.W - w / 2 - 2);
+      if (placed.some(q => Math.abs(q.x - LX) < (q.w + w) / 2 + 4 && Math.abs(q.y - LY) < 20)) continue;
+      placed.push({ x: LX, y: LY, w });
+      this.label(label, LX, LY);
     }
     // tangent line under the pointer
     if (this.hover && this.showTangent) {

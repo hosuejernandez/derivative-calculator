@@ -1,8 +1,9 @@
 // First Derivative Test: domain, critical points, sign chart, increasing/decreasing, extrema.
-import { num, sym, mul, pow, compile, contains, freeSyms, substitute, toTex, size, children } from './expr.js';
+import { num, sym, add, mul, pow, fn, compile, contains, freeSyms, substitute, toTex, size, children } from './expr.js';
 import { simplify, factorCommon } from './simplify.js';
 import { toRational, realRoots, recognize, approxRoot, fmt, factorPolynomial } from './solve.js';
 
+const MAX_POINTS = 8;
 const TRIG = new Set(['sin', 'cos', 'tan', 'sec', 'csc', 'cot']);
 const positiveConst = b => (b.type === 'sym' && (b.name === 'e' || b.name === 'pi')) || (b.type === 'num' && b.n > 0);
 const uniqPts = pts => {
@@ -83,6 +84,34 @@ function exactCritical(fp, v) {
     return fail;
   }
   return { complete: true, zeros: uniqPts(zeros), undef: uniqPts(undef), factored };
+}
+
+// sin(u) = 0, cos(u) = 0, tan(u) = 0 have infinitely many solutions. When u = ax + b or
+// u = e^(ax + b), write the whole family:  e^{2x} = k pi  =>  x = (1/2) ln(k pi), k = 1, 2, 3, ...
+function generalSolutions(factored, v) {
+  const factors = factored.type === 'mul' ? factored.factors : [factored];
+  const out = [];
+  const K = sym('k'), PI = sym('pi');
+  const fixK = t => t.replace(/\\pi k/g, 'k\\pi');
+  for (let F of factors) {
+    if (F.type === 'pow' && F.exp.type === 'num' && F.exp.n > 0) F = F.base;
+    if (F.type !== 'fn' || !['sin', 'cos', 'tan'].includes(F.name)) continue;
+    const u = F.arg;
+    const rhs = F.name === 'cos' ? add([mul([num(1, 2), PI]), mul([K, PI])]) : mul([K, PI]);
+    const rhsTex = F.name === 'cos' ? '\\frac{\\pi}{2} + k\\pi' : 'k\\pi';
+    const isExp = u.type === 'pow' && u.base.type === 'sym' && u.base.name === 'e';
+    const lin = toRational(isExp ? u.exp : u, v);
+    if (!lin || lin.D.length !== 1 || lin.N.length !== 2) continue;
+    const [b, a] = lin.N;
+    const solve = w => simplify(mul([add([w, mul([num(-1), b])]), pow(a, num(-1))]));
+    const xTex = fixK(toTex(solve(isExp ? fn('ln', rhs) : rhs)));
+    const ks = !isExp ? 'k \\text{ any integer}' : F.name === 'cos' ? 'k = 0, 1, 2, \\dots' : 'k = 1, 2, 3, \\dots';
+    const plain = u.type === 'sym' && u.name === v;
+    out.push(plain
+      ? `${toTex(F)} = 0 \\text{ when } ${v} = ${rhsTex}, \\quad ${ks}`
+      : `\\begin{gathered}${toTex(F)} = 0 \\text{ when } ${toTex(u)} = ${rhsTex} \\\\ \\Rightarrow\\; ${v} = ${xTex}, \\quad ${ks}\\end{gathered}`);
+  }
+  return out;
 }
 
 const snap = x => {
@@ -241,37 +270,63 @@ export function analyze(f, fp, v, opts = {}) {
     W = [Math.min(-30, ...xsKnown.map(x => x - 5)), Math.max(30, ...xsKnown.map(x => x + 5))];
   }
 
+  const openEdge = x => { const r = snap(x); return { x: r.x, tex: r.tex, closed: false, node: r.node }; };
   let edges;
   if (mode === 'global' || mode === 'search') edges = [NINF, INF];
   else {
     // a window we chose ourselves is not a real endpoint, so leave it open
-    const e = x => { const r = snap(x); return { x: r.x, tex: r.tex, closed: mode === 'interval' && isFinite(F(r.x)), node: r.node }; };
+    const e = x => ({ ...openEdge(x), closed: mode === 'interval' && isFinite(F(snap(x).x)) });
     edges = [e(W[0]), e(W[1])];
   }
 
-  // domain pieces
-  let pieces;
-  let scanned = null;
-  const doScan = () => scanned || (scanned = scan(F, FP, W ? W[0] : -30, W ? W[1] : 30, edges));
-  if (dom.complete) {
-    const lo = edges[0], hi = edges[1];
-    const poles = dom.poles.filter(p => p.x > lo.x && p.x < hi.x).map(p => ({ ...p, closed: false }));
-    pieces = [];
-    let left = lo;
-    for (const p of poles) { pieces.push({ l: left, r: p }); left = p; }
-    pieces.push({ l: left, r: hi });
-    if (!isFinite(F(lo.x)) && isFinite(lo.x)) lo.closed = false;
-    if (!isFinite(F(hi.x)) && isFinite(hi.x)) hi.closed = false;
-  } else pieces = doScan().pieces;
+  // domain pieces and critical number candidates between two edges
+  function locate(edges, lo, hi) {
+    let scanned = null;
+    const doScan = () => scanned || (scanned = scan(F, FP, lo, hi, edges));
+    let pieces;
+    if (dom.complete) {
+      const L = edges[0], H = edges[1];
+      const poles = dom.poles.filter(p => p.x > L.x && p.x < H.x).map(p => ({ ...p, closed: false }));
+      pieces = [];
+      let left = L;
+      for (const p of poles) { pieces.push({ l: left, r: p }); left = p; }
+      pieces.push({ l: left, r: H });
+      if (!isFinite(F(L.x)) && isFinite(L.x)) L.closed = false;
+      if (!isFinite(F(H.x)) && isFinite(H.x)) H.closed = false;
+    } else pieces = doScan().pieces;
+    const inside = x => pieces.some(p => x > p.l.x && x < p.r.x);
+    let cands;
+    if (crit.complete) {
+      cands = [...crit.zeros.map(z => ({ ...z, kind: 'zero' })), ...crit.undef.map(z => ({ ...z, kind: 'undef' }))]
+        .filter(c => inside(c.x) && isFinite(F(c.x)));
+    } else cands = doScan().cands.filter(c => inside(c.x));
+    return { pieces, cands: uniqPts(cands), inside };
+  }
 
-  // critical point candidates
-  let cands;
-  const inside = x => pieces.some(p => x > p.l.x && x < p.r.x);
-  if (crit.complete) {
-    cands = [...crit.zeros.map(z => ({ ...z, kind: 'zero' })), ...crit.undef.map(z => ({ ...z, kind: 'undef' }))]
-      .filter(c => inside(c.x) && isFinite(F(c.x)));
-  } else cands = doScan().cands.filter(c => inside(c.x));
-  cands = uniqPts(cands);
+  let { pieces, cands, inside } = locate(edges, W ? W[0] : -30, W ? W[1] : 30);
+
+  // Too many critical numbers (cos(e^(2x)) has infinitely many, crowding together):
+  // keep the MAX_POINTS closest to x = 0 and shrink the window around them.
+  let truncated = false, center = 0;
+  if (cands.length > MAX_POINTS) {
+    truncated = true;
+    center = (!W || (W[0] < 0 && W[1] > 0)) ? 0 : isFinite(pieces[0].l.x) ? pieces[0].l.x : cands[0].x;
+    const keep = [...cands].sort((p, q) => Math.abs(p.x - center) - Math.abs(q.x - center)).slice(0, MAX_POINTS)
+      .sort((p, q) => p.x - q.x);
+    const first = keep[0].x, last = keep[keep.length - 1].x;
+    const before = cands.filter(c => c.x < first), after = cands.filter(c => c.x > last);
+    const span = Math.max(last - first, 1e-6);
+    // with nothing dropped on a side, keep a student's own interval end, otherwise leave a little room
+    const pad = Math.max(span / 2, 1);
+    const L = before.length ? openEdge((before[before.length - 1].x + first) / 2)
+      : edges[0].closed ? edges[0] : openEdge(Math.max(edges[0].x, first - pad));
+    const H = after.length ? openEdge((last + after[0].x) / 2)
+      : edges[1].closed ? edges[1] : openEdge(Math.min(edges[1].x, last + pad));
+    edges = [L, H];
+    W = [L.x, H.x];
+    ({ pieces, cands } = locate(edges, L.x, H.x));
+    cands = cands.slice(0, MAX_POINTS);
+  }
 
   // f' undefined but f also undefined -> not critical (shown to students as a note)
   const excluded = crit.complete
@@ -337,13 +392,15 @@ export function analyze(f, fp, v, opts = {}) {
     : pieces.length === 1 && pieces[0].l.x === -Infinity && pieces[0].r.x === Infinity
     ? '(-\\infty, \\infty)' : pieces.map(intervalTex).join(' \\cup ');
 
-  if (mode === 'window') notes.push('This function contains trig functions, which repeat forever, so there are infinitely many critical points. We analyze one window, -2π ≤ x ≤ 2π. Use "Analyze on interval" to choose a different window.');
-  if (mode === 'search') notes.push('These critical points were found numerically by searching from x = ' + fmt(W[0]) + ' to x = ' + fmt(W[1]) + '. Values marked ≈ are decimal approximations.');
-  if (mode === 'interval') notes.push(`Analysis restricted to the interval [${fmt(W[0])}, ${fmt(W[1])}].`);
+  if (truncated) notes.push(`f′ = 0 at infinitely many (or a great many) x-values here, and they crowd together, so we analyze the ${cands.length} closest to x = ${fmt(center)}, on the window ${fmt(W[0])} < x < ${fmt(W[1])}. Use "Analyze on an interval" to look at a different stretch.`);
+  else if (mode === 'window') notes.push('This function contains trig functions, which repeat forever, so there are infinitely many critical points. We analyze one window, -2π ≤ x ≤ 2π. Use "Analyze on interval" to choose a different window.');
+  if (mode === 'search' && !truncated) notes.push('These critical points were found numerically by searching from x = ' + fmt(W[0]) + ' to x = ' + fmt(W[1]) + '. Values marked ≈ are decimal approximations.');
+  if (mode === 'interval' && !truncated) notes.push(`Analysis restricted to the interval [${fmt(W[0])}, ${fmt(W[1])}].`);
 
   return {
-    mode, notes, domainTex, domainExact: dom.complete,
-    domainWithinWindow: (mode === 'window' || mode === 'interval') && !(dom.complete && !dom.poles.length),
+    mode, notes, domainTex, domainExact: dom.complete, truncated,
+    general: generalSolutions(crit.factored, v),
+    domainWithinWindow: (mode === 'window' || mode === 'interval' || truncated) && !(dom.complete && !dom.poles.length),
     factoredTex: toTex(crit.factored) !== toTex(fp) ? toTex(crit.factored) : null,
     zeros: cands.filter(c => c.kind === 'zero'),
     undef: cands.filter(c => c.kind === 'undef'),

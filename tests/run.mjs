@@ -57,6 +57,14 @@ check('fdt cbrt', summary(fdt('x^(2/3)(x-5)')), '0:max 2:min');
 check('fdt semicircle', summary(fdt('sqrt(4-x^2)')), '0:max');
 check('fdt sin', summary(fdt('sin x')), '-\\frac{3 \\pi}{2}:max -\\frac{\\pi}{2}:min \\frac{\\pi}{2}:max \\frac{3 \\pi}{2}:min');
 
+// infinitely many critical numbers: capped, with the general pattern shown
+const many = fdt('cos(e^(2x))');
+check('cap count', many.points.length <= 8 && many.truncated, true);
+check('cap first point', Math.abs(many.points[0].x - Math.log(Math.PI) / 2) < 1e-6, true);
+check('cap general', many.general.some(t => t.includes('\\ln\\left(k\\pi\\right)')), true);
+const sinx = fdt('sin x');
+check('sin not truncated', sinx.truncated === false && sinx.points.length === 4, true);
+
 // every derivative agrees with a finite difference at random points
 const FUNCS = ['x^3-3x', 'x e^x', 'sin(x^2)', 'ln(x)/x', '(x^2+1)/(x-1)', 'x^(2/3)(x-5)', 'sqrt(x^2+1)',
   'x^x', 'tan x', '1/x^2', 'x^2(x+1)^3', 'e^(-x^2)', '2^x', 'arctan(2x)', 'sin^2 x', 'ln|x|', 'cos(3x)sin(x)',

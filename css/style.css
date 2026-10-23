@@ -153,9 +153,20 @@ input[type="text"]:focus, select:focus { outline: 2px solid var(--accent); outli
 .side-title { font-weight: 700; margin: 12px 0 2px; }
 
 /* analysis */
-.stage { margin: 0 0 18px; }
-.stage h3 { display: flex; gap: 8px; align-items: baseline; }
-.stage .num {
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; }
+.card-head h2 { margin: 0; }
+details.stage { margin: 0 0 8px; border: 1px solid var(--border); border-radius: 10px; }
+details.stage > summary {
+  list-style: none; cursor: pointer; display: flex; gap: 8px; align-items: center;
+  padding: 10px 12px; font-weight: 700; border-radius: 10px;
+}
+details.stage > summary::-webkit-details-marker { display: none; }
+details.stage > summary::after { content: "▸"; margin-left: auto; color: var(--muted); }
+details.stage[open] > summary::after { content: "▾"; }
+details.stage > summary:hover { background: #f8fafc; }
+details.stage[open] > summary { border-bottom: 1px solid var(--border); border-radius: 10px 10px 0 0; }
+.stage-body { padding: 8px 14px 12px; }
+.stage .num, details.stage .num {
   display: inline-flex; justify-content: center; align-items: center;
   width: 24px; height: 24px; border-radius: 50%;
   background: var(--accent); color: #fff; font-size: 0.8rem; flex: none;

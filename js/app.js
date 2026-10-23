@@ -284,11 +284,16 @@ function renderAnalysis(a, f, fp, v, fName, constLetters, values) {
   // stage 2: critical numbers
   let crit = `<p>Critical numbers are the ${M(vt)}-values <b>in the domain of ${esc(F)}</b> where ${M(`${Fp} = 0`)} or ${M(Fp)} is undefined.</p>`;
   if (a.factoredTex) crit += `<div class="math-line">${M(`${Fp} = ${a.factoredTex}`, true)}</div>`;
-  crit += `<p>${M(`${Fp} = 0`)} when: ${a.zeros.length ? list(a.zeros) : '<i>never (no solutions)</i>'}</p>`;
+  if (a.general.length) {
+    crit += `<p>A trig factor makes ${M(`${Fp} = 0`)} at infinitely many places. The whole family of solutions:</p>` +
+      a.general.map(t => `<div class="math-line">${M(t, true)}</div>`).join('');
+  }
+  const where = a.truncated ? ' in the window analyzed' : '';
+  crit += `<p>${M(`${Fp} = 0`)}${where} when: ${a.zeros.length ? list(a.zeros) : '<i>never (no solutions)</i>'}</p>`;
   crit += `<p>${M(Fp)} is undefined (but ${esc(F)} is defined) at: ${a.undef.length ? list(a.undef) : '<i>no such points</i>'}</p>`;
   if (a.excluded.length) crit += `<p class="note">${M(Fp)} is also undefined at ${list(a.excluded)}, but ${esc(F)} itself is not defined there, so ${a.excluded.length > 1 ? 'they are not critical numbers' : 'it is not a critical number'}. It still splits the number line into separate intervals.</p>`;
   crit += a.points.length
-    ? `<p><b>Critical numbers:</b> ${list(a.points)}</p>`
+    ? `<p><b>Critical numbers${where}:</b> ${list(a.points)}</p>`
     : `<p><b>There are no critical numbers</b>, so ${esc(F)} never switches between increasing and decreasing ${a.intervals.length > 1 ? 'except across the breaks in its domain' : ''}.</p>`;
 
   // stage 3: sign chart
@@ -326,20 +331,22 @@ function renderAnalysis(a, f, fp, v, fName, constLetters, values) {
   }).join('');
   const ends = a.endpoints.map(p => `<li><span class="tag ${p.type}">endpoint ${p.type}</span>At the endpoint ${M(`${vt} = ${p.tex}`)}, ${M(yPart(p))}.</li>`).join('');
 
-  card.innerHTML = `<h2>First Derivative Test</h2>${usingValues}${notes}
-    <div class="stage"><h3><span class="num">1</span>Find the derivative and the domain</h3>
-      <div class="math-line">${M(`${Fp} = ${toTex(fp)}`, true)}</div>
-      <p>Domain of ${esc(F)}: ${M(a.domainTex)}${a.domainWithinWindow ? ' <i>(within the window analyzed)</i>' : ''}</p></div>
-    <div class="stage"><h3><span class="num">2</span>Find the critical numbers</h3>${crit}</div>
-    <div class="stage"><h3><span class="num">3</span>Make a sign chart for ${M(`${fName}'`)}</h3>
-      <p>The critical numbers and domain breaks split the number line into intervals. Pick a test value in each interval and check the sign of ${M(`${fName}'`)}.</p>
-      ${numline}${table}</div>
-    <div class="stage"><h3><span class="num">4</span>Conclusions</h3>
-      <ul class="conclusions">
+  const stage = (n, title, body, open = false) =>
+    `<details class="stage"${open ? ' open' : ''}><summary><span class="num">${n}</span>${title}</summary><div class="stage-body">${body}</div></details>`;
+  card.innerHTML = `<div class="card-head"><h2>First Derivative Test</h2><button id="expand-stages" class="ghost">Expand all</button></div>${usingValues}${notes}` +
+    stage(1, 'Find the derivative and the domain',
+      `<div class="math-line">${M(`${Fp} = ${toTex(fp)}`, true)}</div>
+      <p>Domain of ${esc(F)}: ${M(a.domainTex)}${a.domainWithinWindow ? ' <i>(within the window analyzed)</i>' : ''}</p>`, true) +
+    stage(2, 'Find the critical numbers', crit) +
+    stage(3, `Make a sign chart for ${M(`${fName}'`)}`,
+      `<p>The critical numbers and domain breaks split the number line into intervals. Pick a test value in each interval and check the sign of ${M(`${fName}'`)}.</p>
+      ${numline}${table}`) +
+    stage(4, 'Conclusions',
+      `<ul class="conclusions">
         <li><span class="tag inc">increasing</span>${esc(F)} is increasing on ${cup(a.increasing)}</li>
         <li><span class="tag dec">decreasing</span>${esc(F)} is decreasing on ${cup(a.decreasing)}</li>
         ${extrema}${ends}
-      </ul></div>`;
+      </ul>`);
   card.hidden = false;
 }
 
@@ -587,6 +594,18 @@ function init() {
     }
   });
   $('analysis-card').addEventListener('input', e => { if (e.target.dataset.eval) updateEval(); });
+  $('analysis-card').addEventListener('click', e => {
+    if (e.target.id !== 'expand-stages') return;
+    const stages = [...$('analysis-card').querySelectorAll('details.stage')];
+    const open = !stages.every(d => d.open);
+    stages.forEach(d => { d.open = open; });
+    e.target.textContent = open ? 'Collapse all' : 'Expand all';
+  });
+  $('analysis-card').addEventListener('toggle', e => {
+    const btn = $('expand-stages');
+    if (btn && e.target.matches('details.stage'))
+      btn.textContent = [...$('analysis-card').querySelectorAll('details.stage')].every(d => d.open) ? 'Collapse all' : 'Expand all';
+  }, true);
 
   $('zoom-in').addEventListener('click', () => graph.zoom(1 / 1.4));
   $('zoom-out').addEventListener('click', () => graph.zoom(1.4));
