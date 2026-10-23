@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Derivative Calculator</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Derivative Calculator</h1>
+      <p>Step-by-step derivatives, the First Derivative Test, and a graph that shows where the function rises and falls.</p>
+    </header>
+
+    <section class="card input-card">
+      <label class="field-label" for="expr">Function or relation</label>
+      <div class="input-row">
+        <input id="expr" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+          placeholder="e.g.  x^3 - 3x    ax^2 + bx + c    x^2 + y^2 = 25">
+        <button id="go" class="primary">Differentiate</button>
+      </div>
+      <div class="keypad" id="keypad" aria-label="Insert math">
+        <button data-insert="^2">x²</button>
+        <button data-insert="^">xⁿ</button>
+        <button data-insert="sqrt(" data-close=")">√</button>
+        <button data-insert="/">÷</button>
+        <button data-insert="(" data-close=")">( )</button>
+        <button data-insert="sin(" data-close=")">sin</button>
+        <button data-insert="cos(" data-close=")">cos</button>
+        <button data-insert="tan(" data-close=")">tan</button>
+        <button data-insert="ln(" data-close=")">ln</button>
+        <button data-insert="e^(" data-close=")">eˣ</button>
+        <button data-insert="pi">π</button>
+        <button data-insert=" = ">=</button>
+      </div>
+      <div id="preview" class="preview" aria-live="polite"></div>
+
+      <div class="options">
+        <label class="wrt">Derivative with respect to:
+          <input id="wrt" type="text" value="x" maxlength="6" autocomplete="off" spellcheck="false">
+        </label>
+        <label class="examples">Examples:
+          <select id="examples"></select>
+        </label>
+      </div>
+
+      <div id="chips" class="chips" hidden></div>
+      <div id="params" class="params" hidden></div>
+
+      <details class="interval-opt" id="interval-opt">
+        <summary>Analyze on an interval (optional)</summary>
+        <div class="interval-row">
+          <label>from <input id="ia" type="text" placeholder="a" autocomplete="off"></label>
+          <label>to <input id="ib" type="text" placeholder="b" autocomplete="off"></label>
+          <button id="clear-interval" class="ghost">Clear</button>
+        </div>
+        <p class="hint">Leave blank to use the whole domain. You can type values like <code>-pi</code> or <code>2pi</code>.</p>
+      </details>
+    </section>
+
+    <div id="error" class="error" role="alert" hidden></div>
+
+    <section id="deriv-card" class="card" hidden>
+      <h2>Derivative</h2>
+      <div id="deriv-result" class="result"></div>
+      <div class="row-actions">
+        <button id="toggle-steps">Show steps</button>
+        <button id="second" hidden>Second derivative</button>
+      </div>
+      <div id="steps" class="steps" hidden></div>
+      <div id="second-out"></div>
+    </section>
+
+    <section id="analysis-card" class="card" hidden></section>
+
+    <section id="graph-card" class="card" hidden>
+      <h2>Graph</h2>
+      <div id="legend" class="legend"></div>
+      <div class="graph-wrap"><canvas id="graph" aria-label="Graph of the function"></canvas></div>
+      <div id="readout" class="readout"></div>
+      <div class="row-actions graph-controls">
+        <button id="zoom-in" aria-label="Zoom in">＋</button>
+        <button id="zoom-out" aria-label="Zoom out">－</button>
+        <button id="zoom-reset">Reset view</button>
+        <label class="check" id="deriv-toggle"><input type="checkbox" id="show-deriv"> Show <span id="deriv-name">f′</span></label>
+        <label class="check"><input type="checkbox" id="show-tangent" checked> Tangent line</label>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
