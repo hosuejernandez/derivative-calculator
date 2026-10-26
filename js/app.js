@@ -239,7 +239,7 @@ function runExplicit(f, v, deps, letters, how) {
     const d2 = differentiate(d.result, v, deps);
     fppN = pretty(substitute(d2.result, values));
     conc = analyze(fN, fppN, v, { interval, prime: '″', pointWord: 'possible inflection points' });
-    renderConcavity(conc, a, fN, fppN, v, fName, d2.steps);
+    renderConcavity(conc, a, fN, fppN, v, fName, constLetters, values);
   } catch (e) {
     console.error(e);
     $('concavity-card').hidden = true;
@@ -294,63 +294,69 @@ function stepTree(step, v, depth) {
 
 // ---------- First Derivative Test ----------
 
-function renderAnalysis(a, f, fp, v, fName, constLetters, values) {
-  const card = $('analysis-card');
-  const vt = symTex(v);
-  const F = `${fName}`;
-  const Fp = `${fName}'(${vt})`;
-  const usingValues = constLetters.length
-    ? `<p class="note">Using ${constLetters.map(l => M(`${symTex(l)} = ${toTex(values[l])}`)).join(', ')}: ${M(`${F}(${vt}) = ${toTex(f)}`)}</p>` : '';
-
+// Stages 1-4 are the same test for f' and f'': only the words change.
+function testStages(a, o) {
+  const { vt, F, d } = o;
+  const D = `${d}(${vt})`;
   const list = pts => pts.map(p => M(`${vt} = ${p.tex}`)).join(', ');
-  const notes = a.notes.map(n => `<p class="note">${esc(n)}</p>`).join('');
+  const where = a.truncated ? ' in the window analyzed' : '';
+  const Pts = o.points[0].toUpperCase() + o.points.slice(1);
 
-  // stage 2: critical numbers
-  let crit = `<p>Critical numbers are the ${M(vt)}-values <b>in the domain of ${esc(F)}</b> where ${M(`${Fp} = 0`)} or ${M(Fp)} is undefined.</p>`;
-  if (a.factoredTex) crit += `<div class="math-line">${M(`${Fp} = ${a.factoredTex}`, true)}</div>`;
+  let cand = `<p>${Pts} are the ${M(vt)}-values <b>in the domain of ${esc(F)}</b> where ${M(`${D} = 0`)} or ${M(D)} is undefined.</p>`;
+  if (a.factoredTex) cand += `<div class="math-line">${M(`${D} = ${a.factoredTex}`, true)}</div>`;
   if (a.general.length) {
-    crit += `<p>A trig factor makes ${M(`${Fp} = 0`)} at infinitely many places. The whole family of solutions:</p>` +
+    cand += `<p>A trig factor makes ${M(`${D} = 0`)} at infinitely many places. The whole family of solutions:</p>` +
       a.general.map(t => `<div class="math-line">${M(t, true)}</div>`).join('');
   }
-  const where = a.truncated ? ' in the window analyzed' : '';
-  crit += `<p>${M(`${Fp} = 0`)}${where} when: ${a.zeros.length ? list(a.zeros) : '<i>never (no solutions)</i>'}</p>`;
-  crit += `<p>${M(Fp)} is undefined (but ${esc(F)} is defined) at: ${a.undef.length ? list(a.undef) : '<i>no such points</i>'}</p>`;
-  if (a.excluded.length) crit += `<p class="note">${M(Fp)} is also undefined at ${list(a.excluded)}, but ${esc(F)} itself is not defined there, so ${a.excluded.length > 1 ? 'they are not critical numbers' : 'it is not a critical number'}. It still splits the number line into separate intervals.</p>`;
-  crit += a.points.length
-    ? `<p><b>Critical numbers${where}:</b> ${list(a.points)}</p>`
-    : `<p><b>There are no critical numbers</b>, so ${esc(F)} never switches between increasing and decreasing ${a.intervals.length > 1 ? 'except across the breaks in its domain' : ''}.</p>`;
+  cand += `<p>${M(`${D} = 0`)}${where} when: ${a.zeros.length ? list(a.zeros) : '<i>never (no solutions)</i>'}</p>`;
+  cand += `<p>${M(D)} is undefined (but ${esc(F)} is defined) at: ${a.undef.length ? list(a.undef) : '<i>no such points</i>'}</p>`;
+  if (a.excluded.length) cand += `<p class="note">${M(D)} is also undefined at ${list(a.excluded)}, but ${esc(F)} itself is not defined there, so ${a.excluded.length > 1 ? 'they are not' : 'it is not'} ${o.one}. It still splits the number line into separate intervals.</p>`;
+  cand += a.points.length
+    ? `<p><b>${Pts}${where}:</b> ${list(a.points)}</p>`
+    : `<p><b>There are no ${o.points}</b>, so ${esc(F)} never switches between ${o.up.word} and ${o.down.word}${a.intervals.length > 1 ? ' except across the breaks in its domain' : ''}.</p>`;
 
-  // stage 3: sign chart
-  const { numline, table } = signChart(a, vt, `${fName}'`, F, INC_WORDS);
-
-  // stage 4: conclusions
+  const { numline, table } = signChart(a, vt, d, F, o.words);
   const cup = arr => (arr.length ? M(arr.join(' \\cup ')) : '<i>nowhere</i>');
-  const yPart = p => (p.yTex.startsWith('\\approx') ? `${F}(${p.tex}) ${p.yTex}` : `${F}(${p.tex}) = ${p.yTex}`);
-  const extrema = a.points.map(p => {
-    if (p.type === 'neither') {
-      return `<li><span class="tag neither">neither</span>At ${M(`${vt} = ${p.tex}`)}, ${M(`${fName}'`)} does not change sign, so there is no local max or min there.</li>`;
-    }
-    const change = p.type === 'max' ? 'from + to −' : 'from − to +';
-    return `<li><span class="tag ${p.type}">local ${p.type}</span>${M(`${vt} = ${p.tex}`)}: ${M(`${fName}'`)} changes ${change}, so there is a local ${p.type === 'max' ? 'maximum' : 'minimum'} value of ${M(yPart(p))}.</li>`;
-  }).join('');
-  const ends = a.endpoints.map(p => `<li><span class="tag ${p.type}">endpoint ${p.type}</span>At the endpoint ${M(`${vt} = ${p.tex}`)}, ${M(yPart(p))}.</li>`).join('');
+  const lines = a.points.map(p => (p.type === 'neither'
+    ? `<li><span class="tag neither">neither</span>At ${M(`${vt} = ${p.tex}`)}, ${M(d)} does not change sign, so there is ${o.none} there.</li>`
+    : `<li><span class="tag ${o.tag(p)}">${o.tagText(p)}</span>${M(`${vt} = ${p.tex}`)}: ${M(d)} changes ${p.type === 'max' ? 'from + to −' : 'from − to +'}, so there is ${o.result(p)}.</li>`)).join('');
 
-  const stage = stageHTML;
-  card.innerHTML = `${cardHead('First Derivative Test')}${usingValues}${notes}` +
-    stage(1, 'Find the derivative and the domain',
-      `<div class="math-line">${M(`${Fp} = ${toTex(fp)}`, true)}</div>
+  return stageHTML(1, o.stage1,
+      `<div class="math-line">${M(`${D} = ${toTex(o.deriv)}`, true)}</div>
       <p>Domain of ${esc(F)}: ${M(a.domainTex)}${a.domainWithinWindow ? ' <i>(within the window analyzed)</i>' : ''}</p>`, true) +
-    stage(2, 'Find the critical numbers', crit) +
-    stage(3, `Make a sign chart for ${M(`${fName}'`)}`,
-      `<p>The critical numbers and domain breaks split the number line into intervals. Pick a test value in each interval and check the sign of ${M(`${fName}'`)}.</p>
+    stageHTML(2, `Find the ${o.points}`, cand) +
+    stageHTML(3, `Make a sign chart for ${M(d)}`,
+      `<p>The ${o.points} and domain breaks split the number line into intervals. Pick a test value in each interval and check the sign of ${M(d)}.</p>
+      <p>${M(`${d} > 0`)} means ${esc(F)} is <b>${o.up.word}</b> ${o.up.sym}; ${M(`${d} < 0`)} means ${esc(F)} is <b>${o.down.word}</b> ${o.down.sym}.</p>
       ${numline}${table}`) +
-    stage(4, 'Conclusions',
+    stageHTML(4, 'Conclusions',
       `<ul class="conclusions">
-        <li><span class="tag inc">increasing</span>${esc(F)} is increasing on ${cup(a.increasing)}</li>
-        <li><span class="tag dec">decreasing</span>${esc(F)} is decreasing on ${cup(a.decreasing)}</li>
-        ${extrema}${ends}
+        <li><span class="tag ${o.up.tag}">${o.up.word}</span>${esc(F)} is ${o.up.word} on ${cup(a.increasing)}</li>
+        <li><span class="tag ${o.down.tag}">${o.down.word}</span>${esc(F)} is ${o.down.word} on ${cup(a.decreasing)}</li>
+        ${lines}${o.extra || ''}
       </ul>`);
-  card.hidden = false;
+}
+
+const usingValuesHTML = (f, vt, F, constLetters, values) => (constLetters.length
+  ? `<p class="note">Using ${constLetters.map(l => M(`${symTex(l)} = ${toTex(values[l])}`)).join(', ')}: ${M(`${F}(${vt}) = ${toTex(f)}`)}</p>` : '');
+const yPartOf = F => p => (p.yTex.startsWith('\\approx') ? `${F}(${p.tex}) ${p.yTex}` : `${F}(${p.tex}) = ${p.yTex}`);
+
+function renderAnalysis(a, f, fp, v, fName, constLetters, values) {
+  const vt = symTex(v), F = fName, yPart = yPartOf(F);
+  const ends = a.endpoints.map(p => `<li><span class="tag ${p.type}">endpoint ${p.type}</span>At the endpoint ${M(`${vt} = ${p.tex}`)}, ${M(yPart(p))}.</li>`).join('');
+  $('analysis-card').innerHTML = cardHead('First Derivative Test: Increasing &amp; Decreasing') +
+    usingValuesHTML(f, vt, F, constLetters, values) + a.notes.map(n => `<p class="note">${esc(n)}</p>`).join('') +
+    testStages(a, {
+      vt, F, d: `${fName}'`, deriv: fp, words: INC_WORDS,
+      stage1: 'Find the derivative and the domain',
+      points: 'critical numbers', one: 'a critical number',
+      up: { word: 'increasing', sym: '↗', tag: 'inc' }, down: { word: 'decreasing', sym: '↘', tag: 'dec' },
+      none: 'no local max or min',
+      tag: p => p.type, tagText: p => `local ${p.type}`,
+      result: p => `a local ${p.type === 'max' ? 'maximum' : 'minimum'} value of ${M(yPart(p))}`,
+      extra: ends,
+    });
+  $('analysis-card').hidden = false;
 }
 
 const INC_WORDS = { posCls: 'pos', negCls: 'neg', pos: '↗ inc', neg: '↘ dec', zero: 'flat', posLong: 'increasing ↗', negLong: 'decreasing ↘', zeroLong: 'constant', row: 'is' };
@@ -401,35 +407,10 @@ function intervalTex(iv) {
 
 // ---------- Second Derivative Test: concavity and inflection points ----------
 
-function renderConcavity(c, fdt, f, fpp, v, fName, d2steps) {
+function renderConcavity(c, fdt, f, fpp, v, fName, constLetters, values) {
   const card = $('concavity-card');
-  const vt = symTex(v);
-  const F = fName, Fpp = `${fName}''(${vt})`, d = `${fName}''`;
-  const list = pts => pts.map(p => M(`${vt} = ${p.tex}`)).join(', ');
-  const notes = c.notes.map(n => `<p class="note">${esc(n)}</p>`).join('');
-  const where = c.truncated ? ' in the window analyzed' : '';
-  const yPart = p => (p.yTex.startsWith('\\approx') ? `${F}(${p.tex}) ${p.yTex}` : `${F}(${p.tex}) = ${p.yTex}`);
-
-  let cand = `<p>${esc(F)} can only change concavity where ${M(`${Fpp} = 0`)} or ${M(Fpp)} is undefined (and ${esc(F)} is defined). These are the <b>possible</b> inflection points.</p>`;
-  if (c.factoredTex) cand += `<div class="math-line">${M(`${Fpp} = ${c.factoredTex}`, true)}</div>`;
-  if (c.general.length) {
-    cand += `<p>A trig factor makes ${M(`${Fpp} = 0`)} at infinitely many places. The whole family of solutions:</p>` +
-      c.general.map(t => `<div class="math-line">${M(t, true)}</div>`).join('');
-  }
-  cand += `<p>${M(`${Fpp} = 0`)}${where} when: ${c.zeros.length ? list(c.zeros) : '<i>never (no solutions)</i>'}</p>`;
-  cand += `<p>${M(Fpp)} is undefined (but ${esc(F)} is defined) at: ${c.undef.length ? list(c.undef) : '<i>no such points</i>'}</p>`;
-  if (c.excluded.length) cand += `<p class="note">${M(Fpp)} is also undefined at ${list(c.excluded)}, but ${esc(F)} is not defined there, so there is no point on the graph. It still splits the number line.</p>`;
-  cand += c.points.length
-    ? `<p><b>Possible inflection points${where}:</b> ${list(c.points)}</p>`
-    : `<p><b>There are none</b>, so ${esc(F)} never switches concavity${c.intervals.length > 1 ? ' except across the breaks in its domain' : ''}.</p>`;
-
-  const { numline, table } = signChart(c, vt, d, F, CONC_WORDS);
-
-  const cup = arr => (arr.length ? M(arr.join(' \\cup ')) : '<i>nowhere</i>');
-  const infl = c.points.map(p => (p.type === 'neither'
-    ? `<li><span class="tag neither">not inflection</span>At ${M(`${vt} = ${p.tex}`)}, ${M(d)} does not change sign, so the concavity stays the same. No inflection point.</li>`
-    : `<li><span class="tag infl">inflection point</span>At ${M(`${vt} = ${p.tex}`)}, ${M(d)} changes ${p.type === 'max' ? 'from + to −' : 'from − to +'}, so ${esc(F)} switches from concave ${p.type === 'max' ? 'up to concave down' : 'down to concave up'}. Inflection point: ${M(`\\left(${p.tex},\\ ${p.yTex.replace(/^\\approx\s*/, '')}\\right)`)}${p.yTex.startsWith('\\approx') ? ' (approximately)' : ''}.</li>`)).join('');
-
+  const vt = symTex(v), F = fName, d = `${fName}''`;
+  const point = p => `\\left(${p.tex},\\ ${p.yTex.replace(/^\\approx\s*/, '')}\\right)`;
   // Second Derivative Test for the critical numbers found by the First Derivative Test
   const fppC = compile(fpp);
   const sdt = fdt.points.map(p => {
@@ -450,20 +431,17 @@ function renderConcavity(c, fdt, f, fpp, v, fName, d2steps) {
     return `<li><span class="tag neither">inconclusive</span>${at}: ${value}, so the Second Derivative Test gives no answer. The First Derivative Test says: ${p.type === 'neither' ? 'neither' : `local ${p.type}`}.</li>`;
   }).join('');
 
-  card.innerHTML = `${cardHead('Second Derivative Test: Concavity')}${notes}` +
-    stageHTML(1, 'Find the second derivative',
-      `<p>Differentiate ${M(`${fName}'(${vt})`)} again:</p>
-      <div class="math-line">${M(`${Fpp} = ${toTex(fpp)}`, true)}</div>
-      <details class="mini"><summary>Steps</summary><div class="steps">${stepTree(d2steps, v, 0)}</div></details>`, true) +
-    stageHTML(2, 'Find the possible inflection points', cand) +
-    stageHTML(3, `Make a sign chart for ${M(d)}`,
-      `<p>Pick a test value in each interval. Where ${M(`${d} > 0`)} the graph is <b>concave up</b> (∪, holds water); where ${M(`${d} < 0`)} it is <b>concave down</b> (∩).</p>${numline}${table}`) +
-    stageHTML(4, 'Concavity and inflection points',
-      `<ul class="conclusions">
-        <li><span class="tag up">concave up</span>${esc(F)} is concave up on ${cup(c.increasing)}</li>
-        <li><span class="tag down">concave down</span>${esc(F)} is concave down on ${cup(c.decreasing)}</li>
-        ${infl}
-      </ul>${c.points.length ? '' : '<p>There are no inflection points.</p>'}`) +
+  card.innerHTML = cardHead('Second Derivative Test: Concavity') +
+    usingValuesHTML(f, vt, F, constLetters, values) + c.notes.map(n => `<p class="note">${esc(n)}</p>`).join('') +
+    testStages(c, {
+      vt, F, d, deriv: fpp, words: CONC_WORDS,
+      stage1: 'Find the second derivative and the domain',
+      points: 'possible inflection points', one: 'a possible inflection point',
+      up: { word: 'concave up', sym: '∪', tag: 'up' }, down: { word: 'concave down', sym: '∩', tag: 'down' },
+      none: 'no inflection point',
+      tag: () => 'infl', tagText: () => 'inflection point',
+      result: p => `an inflection point at ${M(point(p))}${p.yTex.startsWith('\\approx') ? ' (approximately)' : ''}`,
+    }) +
     stageHTML(5, 'Second Derivative Test for local extrema',
       fdt.points.length
         ? `<p>At each critical number ${M('c')} where ${M(`${fName}'(c) = 0`)}: if ${M(`${d}(c) > 0`)} there is a local min; if ${M(`${d}(c) < 0`)} a local max; if ${M(`${d}(c) = 0`)} the test is inconclusive.</p><ul class="conclusions">${sdt}</ul>`
