@@ -77,6 +77,8 @@
 
     <section id="analysis-card" class="card" hidden></section>
 
+    <section id="concavity-card" class="card" hidden></section>
+
     <section id="graph-card" class="card" hidden>
       <h2>Graph</h2>
       <div id="legend" class="legend"></div>
@@ -86,6 +88,12 @@
         <button id="zoom-in" aria-label="Zoom in">＋</button>
         <button id="zoom-out" aria-label="Zoom out">－</button>
         <button id="zoom-reset">Reset view</button>
+        <label class="check" id="color-by-wrap">Color by
+          <select id="color-by">
+            <option value="slope">increasing / decreasing</option>
+            <option value="concavity">concavity</option>
+          </select>
+        </label>
         <label class="check" id="deriv-toggle"><input type="checkbox" id="show-deriv"> Show <span id="deriv-name">f′</span></label>
         <label class="check"><input type="checkbox" id="show-tangent" checked> Tangent line</label>
       </div>

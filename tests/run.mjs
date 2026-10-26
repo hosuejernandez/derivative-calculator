@@ -65,6 +65,22 @@ check('cap general', many.general.some(t => t.includes('\\ln\\left(k\\pi\\right)
 const sinx = fdt('sin x');
 check('sin not truncated', sinx.truncated === false && sinx.points.length === 4, true);
 
+// concavity: run the same analysis on f''
+function conc(src) {
+  setMainVar('x');
+  const f = simplify(parse(src));
+  const fpp = differentiate(differentiate(f, 'x').result, 'x').result;
+  return analyze(f, fpp, 'x', { prime: '″', pointWord: 'possible inflection points' });
+}
+const infl = a => a.points.map(p => `${p.tex}:${p.type === 'neither' ? 'no' : 'yes'}`).join(' ');
+check('conc cubic', infl(conc('x^3-3x')), '0:yes');
+check('conc cubic up', conc('x^3-3x').increasing.join(' U '), '(0, \\infty)');
+check('conc quartic', infl(conc('x^4')), '0:no');
+check('conc x^4-4x^3', infl(conc('x^4-4x^3')), '0:yes 2:yes');
+check('conc cube root', infl(conc('x^(1/3)')), '0:yes');
+check('conc 1/x', conc('1/x').points.length + ' ' + conc('1/x').increasing.join(' U '), '0 (0, \\infty)');
+check('conc gaussian', infl(conc('e^(-x^2)')), '-\\frac{\\sqrt{2}}{2}:yes \\frac{\\sqrt{2}}{2}:yes');
+
 // every derivative agrees with a finite difference at random points
 const FUNCS = ['x^3-3x', 'x e^x', 'sin(x^2)', 'ln(x)/x', '(x^2+1)/(x-1)', 'x^(2/3)(x-5)', 'sqrt(x^2+1)',
   'x^x', 'tan x', '1/x^2', 'x^2(x+1)^3', 'e^(-x^2)', '2^x', 'arctan(2x)', 'sin^2 x', 'ln|x|', 'cos(3x)sin(x)',

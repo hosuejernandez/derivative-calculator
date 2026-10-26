@@ -191,7 +191,7 @@ function showError(msg) {
   const box = $('error');
   box.textContent = msg;
   box.hidden = false;
-  ['deriv-card', 'analysis-card', 'graph-card'].forEach(id => { $(id).hidden = true; });
+  ['deriv-card', 'analysis-card', 'concavity-card', 'graph-card'].forEach(id => { $(id).hidden = true; });
 }
 
 function derivLabel(how, v) {
@@ -221,6 +221,7 @@ function runExplicit(f, v, deps, letters, how) {
   if (contains(d.result, n => n.type === 'sym' && !!n.deriv) || [...deps].some(l => freeSyms(f).has(l))) {
     $('second').hidden = true;
     $('analysis-card').hidden = true;
+    $('concavity-card').hidden = true;
     $('graph-card').hidden = true;
     return;
   }
@@ -232,19 +233,42 @@ function runExplicit(f, v, deps, letters, how) {
   const a = analyze(fN, fpN, v, { interval });
   renderAnalysis(a, fN, fpN, v, fName, constLetters, values);
 
+  // Second Derivative Test (concavity). If it fails, the First Derivative Test still shows.
+  let fppN = null, conc = null;
+  try {
+    const d2 = differentiate(d.result, v, deps);
+    fppN = pretty(substitute(d2.result, values));
+    conc = analyze(fN, fppN, v, { interval, prime: '″', pointWord: 'possible inflection points' });
+    renderConcavity(conc, a, fN, fppN, v, fName, d2.steps);
+  } catch (e) {
+    console.error(e);
+    $('concavity-card').hidden = true;
+  }
+
   // graph
-  const fc = compile(fN), fpc = compile(fpN);
+  const fc = compile(fN), fpc = compile(fpN), fppc = fppN ? compile(fppN) : null;
   showCard('graph-card');
   $('deriv-toggle').hidden = false;
   $('deriv-name').textContent = `${fName}′`;
-  $('legend').innerHTML = `<span><i style="background:var(--inc)"></i>${esc(fName)} increasing (${esc(fName)}′ &gt; 0)</span>` +
-    `<span><i style="background:var(--dec)"></i>${esc(fName)} decreasing (${esc(fName)}′ &lt; 0)</span>` +
-    `<span><i style="background:var(--deriv)"></i>${esc(fName)}′ (dashed, optional)</span>` +
-    `<span><i style="background:#f59e0b"></i>tangent line</span>`;
+  $('color-by-wrap').hidden = !fppN;
+  setLegend(fName);
   graph.setExplicit({
-    f: x => fc({ [v]: x }), fp: x => fpc({ [v]: x }),
-    points: a.points, window: a.window, xName: v, fName,
+    f: x => fc({ [v]: x }), fp: x => fpc({ [v]: x }), fpp: fppc ? x => fppc({ [v]: x }) : null,
+    points: a.points, inflections: conc ? conc.points.filter(p => p.type !== 'neither') : [],
+    window: a.window, xName: v, fName,
   });
+}
+
+function setLegend(fName) {
+  const n = esc(fName);
+  $('legend').innerHTML = (graph.colorBy === 'concavity'
+    ? `<span><i style="background:var(--up)"></i>${n} concave up (${n}″ &gt; 0)</span>` +
+      `<span><i style="background:var(--down)"></i>${n} concave down (${n}″ &lt; 0)</span>`
+    : `<span><i style="background:var(--inc)"></i>${n} increasing (${n}′ &gt; 0)</span>` +
+      `<span><i style="background:var(--dec)"></i>${n} decreasing (${n}′ &lt; 0)</span>`) +
+    `<span><i style="background:var(--deriv)"></i>${n}′ (dashed, optional)</span>` +
+    `<span><i class="ring"></i>inflection point</span>` +
+    `<span><i style="background:#f59e0b"></i>tangent line</span>`;
 }
 
 function readInterval() {
@@ -297,27 +321,7 @@ function renderAnalysis(a, f, fp, v, fName, constLetters, values) {
     : `<p><b>There are no critical numbers</b>, so ${esc(F)} never switches between increasing and decreasing ${a.intervals.length > 1 ? 'except across the breaks in its domain' : ''}.</p>`;
 
   // stage 3: sign chart
-  const segs = a.intervals.map(iv => {
-    const cls = iv.sign > 0 ? 'pos' : iv.sign < 0 ? 'neg' : 'zero';
-    return `<div class="seg ${cls}"><span class="sgn">${iv.sign > 0 ? '+' : iv.sign < 0 ? '−' : '0'}</span><span>${iv.sign > 0 ? '↗ inc' : iv.sign < 0 ? '↘ dec' : 'flat'}</span><span class="tv">test ${M(`${vt}=${iv.test.tex}`)}</span></div>`;
-  });
-  const pts = [];
-  a.intervals.forEach((iv, i) => {
-    if (i === 0) pts.push(ptHTML(iv.l, true));
-    pts.push(segs[i]);
-    const next = a.intervals[i + 1];
-    const joined = next && Math.abs(next.l.x - iv.r.x) < 1e-12;
-    pts.push(ptHTML(iv.r, !next, joined ? isCrit(iv.r, a) : false));
-    if (next && !joined) pts.push(ptHTML(next.l, true));
-  });
-  const numline = `<div class="numline-wrap"><div class="numline">${pts.join('')}</div></div>`;
-  const table = `<div class="table-wrap"><table class="signs">
-    <tr><th>Interval</th>${a.intervals.map(iv => `<td>${M(intervalTex(iv))}</td>`).join('')}</tr>
-    <tr><th>Test value</th>${a.intervals.map(iv => `<td>${M(`${vt} = ${iv.test.tex}`)}</td>`).join('')}</tr>
-    <tr><th>${M(`${fName}'(\\text{test})`)}</th>${a.intervals.map(iv => `<td>${M(`${fName}'(${iv.test.tex}) ${iv.valueTex.startsWith('\\approx') ? '' : '='} ${iv.valueTex}`)}</td>`).join('')}</tr>
-    <tr><th>Sign of ${M(`${fName}'`)}</th>${a.intervals.map(iv => `<td class="${iv.sign > 0 ? 'pos' : iv.sign < 0 ? 'neg' : ''}">${iv.sign > 0 ? '+' : iv.sign < 0 ? '−' : '0'}</td>`).join('')}</tr>
-    <tr><th>${esc(F)} is</th>${a.intervals.map(iv => `<td class="${iv.sign > 0 ? 'pos' : iv.sign < 0 ? 'neg' : ''}">${iv.sign > 0 ? 'increasing ↗' : iv.sign < 0 ? 'decreasing ↘' : 'constant'}</td>`).join('')}</tr>
-  </table></div>`;
+  const { numline, table } = signChart(a, vt, `${fName}'`, F, INC_WORDS);
 
   // stage 4: conclusions
   const cup = arr => (arr.length ? M(arr.join(' \\cup ')) : '<i>nowhere</i>');
@@ -331,9 +335,8 @@ function renderAnalysis(a, f, fp, v, fName, constLetters, values) {
   }).join('');
   const ends = a.endpoints.map(p => `<li><span class="tag ${p.type}">endpoint ${p.type}</span>At the endpoint ${M(`${vt} = ${p.tex}`)}, ${M(yPart(p))}.</li>`).join('');
 
-  const stage = (n, title, body, open = false) =>
-    `<details class="stage"${open ? ' open' : ''}><summary><span class="num">${n}</span>${title}</summary><div class="stage-body">${body}</div></details>`;
-  card.innerHTML = `<div class="card-head"><h2>First Derivative Test</h2><button id="expand-stages" class="ghost">Expand all</button></div>${usingValues}${notes}` +
+  const stage = stageHTML;
+  card.innerHTML = `${cardHead('First Derivative Test')}${usingValues}${notes}` +
     stage(1, 'Find the derivative and the domain',
       `<div class="math-line">${M(`${Fp} = ${toTex(fp)}`, true)}</div>
       <p>Domain of ${esc(F)}: ${M(a.domainTex)}${a.domainWithinWindow ? ' <i>(within the window analyzed)</i>' : ''}</p>`, true) +
@@ -350,6 +353,41 @@ function renderAnalysis(a, f, fp, v, fName, constLetters, values) {
   card.hidden = false;
 }
 
+const INC_WORDS = { posCls: 'pos', negCls: 'neg', pos: '↗ inc', neg: '↘ dec', zero: 'flat', posLong: 'increasing ↗', negLong: 'decreasing ↘', zeroLong: 'constant', row: 'is' };
+const CONC_WORDS = { posCls: 'cup', negCls: 'cap', pos: '∪ up', neg: '∩ down', zero: 'flat', posLong: 'concave up ∪', negLong: 'concave down ∩', zeroLong: 'linear', row: 'is' };
+
+// Number line and test-value table for the sign of a derivative (d is its TeX name, like f' or f'').
+function signChart(a, vt, d, F, w) {
+  const segs = a.intervals.map(iv => {
+    const cls = iv.sign > 0 ? w.posCls : iv.sign < 0 ? w.negCls : 'zero';
+    const sg = iv.sign > 0 ? '+' : iv.sign < 0 ? '−' : '0';
+    return `<div class="seg ${cls}"><span class="sgn">${sg}</span><span>${iv.sign > 0 ? w.pos : iv.sign < 0 ? w.neg : w.zero}</span><span class="tv">test ${M(`${vt}=${iv.test.tex}`)}</span></div>`;
+  });
+  const pts = [];
+  a.intervals.forEach((iv, i) => {
+    if (i === 0) pts.push(ptHTML(iv.l, true));
+    pts.push(segs[i]);
+    const next = a.intervals[i + 1];
+    const joined = next && Math.abs(next.l.x - iv.r.x) < 1e-12;
+    pts.push(ptHTML(iv.r, !next, joined ? isCrit(iv.r, a) : false));
+    if (next && !joined) pts.push(ptHTML(next.l, true));
+  });
+  const cls = iv => (iv.sign > 0 ? w.posCls : iv.sign < 0 ? w.negCls : '');
+  const numline = `<div class="numline-wrap"><div class="numline">${pts.join('')}</div></div>`;
+  const table = `<div class="table-wrap"><table class="signs">
+    <tr><th>Interval</th>${a.intervals.map(iv => `<td>${M(intervalTex(iv))}</td>`).join('')}</tr>
+    <tr><th>Test value</th>${a.intervals.map(iv => `<td>${M(`${vt} = ${iv.test.tex}`)}</td>`).join('')}</tr>
+    <tr><th>${M(`${d}(\\text{test})`)}</th>${a.intervals.map(iv => `<td>${M(`${d}(${iv.test.tex}) ${iv.valueTex.startsWith('\\approx') ? '' : '='} ${iv.valueTex}`)}</td>`).join('')}</tr>
+    <tr><th>Sign of ${M(d)}</th>${a.intervals.map(iv => `<td class="${cls(iv)}">${iv.sign > 0 ? '+' : iv.sign < 0 ? '−' : '0'}</td>`).join('')}</tr>
+    <tr><th>${esc(F)} ${w.row}</th>${a.intervals.map(iv => `<td class="${cls(iv)}">${iv.sign > 0 ? w.posLong : iv.sign < 0 ? w.negLong : w.zeroLong}</td>`).join('')}</tr>
+  </table></div>`;
+  return { numline, table };
+}
+
+const stageHTML = (n, title, body, open = false) =>
+  `<details class="stage"${open ? ' open' : ''}><summary><span class="num">${n}</span>${title}</summary><div class="stage-body">${body}</div></details>`;
+const cardHead = title => `<div class="card-head"><h2>${title}</h2><button class="ghost expand-stages">Expand all</button></div>`;
+
 function isCrit(pt, a) { return a.points.some(p => Math.abs(p.x - pt.x) < 1e-12); }
 
 function ptHTML(pt, isEnd, crit = false) {
@@ -359,6 +397,78 @@ function ptHTML(pt, isEnd, crit = false) {
 
 function intervalTex(iv) {
   return `${iv.l.closed ? '[' : '('}${iv.l.tex}, ${iv.r.tex}${iv.r.closed ? ']' : ')'}`;
+}
+
+// ---------- Second Derivative Test: concavity and inflection points ----------
+
+function renderConcavity(c, fdt, f, fpp, v, fName, d2steps) {
+  const card = $('concavity-card');
+  const vt = symTex(v);
+  const F = fName, Fpp = `${fName}''(${vt})`, d = `${fName}''`;
+  const list = pts => pts.map(p => M(`${vt} = ${p.tex}`)).join(', ');
+  const notes = c.notes.map(n => `<p class="note">${esc(n)}</p>`).join('');
+  const where = c.truncated ? ' in the window analyzed' : '';
+  const yPart = p => (p.yTex.startsWith('\\approx') ? `${F}(${p.tex}) ${p.yTex}` : `${F}(${p.tex}) = ${p.yTex}`);
+
+  let cand = `<p>${esc(F)} can only change concavity where ${M(`${Fpp} = 0`)} or ${M(Fpp)} is undefined (and ${esc(F)} is defined). These are the <b>possible</b> inflection points.</p>`;
+  if (c.factoredTex) cand += `<div class="math-line">${M(`${Fpp} = ${c.factoredTex}`, true)}</div>`;
+  if (c.general.length) {
+    cand += `<p>A trig factor makes ${M(`${Fpp} = 0`)} at infinitely many places. The whole family of solutions:</p>` +
+      c.general.map(t => `<div class="math-line">${M(t, true)}</div>`).join('');
+  }
+  cand += `<p>${M(`${Fpp} = 0`)}${where} when: ${c.zeros.length ? list(c.zeros) : '<i>never (no solutions)</i>'}</p>`;
+  cand += `<p>${M(Fpp)} is undefined (but ${esc(F)} is defined) at: ${c.undef.length ? list(c.undef) : '<i>no such points</i>'}</p>`;
+  if (c.excluded.length) cand += `<p class="note">${M(Fpp)} is also undefined at ${list(c.excluded)}, but ${esc(F)} is not defined there, so there is no point on the graph. It still splits the number line.</p>`;
+  cand += c.points.length
+    ? `<p><b>Possible inflection points${where}:</b> ${list(c.points)}</p>`
+    : `<p><b>There are none</b>, so ${esc(F)} never switches concavity${c.intervals.length > 1 ? ' except across the breaks in its domain' : ''}.</p>`;
+
+  const { numline, table } = signChart(c, vt, d, F, CONC_WORDS);
+
+  const cup = arr => (arr.length ? M(arr.join(' \\cup ')) : '<i>nowhere</i>');
+  const infl = c.points.map(p => (p.type === 'neither'
+    ? `<li><span class="tag neither">not inflection</span>At ${M(`${vt} = ${p.tex}`)}, ${M(d)} does not change sign, so the concavity stays the same. No inflection point.</li>`
+    : `<li><span class="tag infl">inflection point</span>At ${M(`${vt} = ${p.tex}`)}, ${M(d)} changes ${p.type === 'max' ? 'from + to −' : 'from − to +'}, so ${esc(F)} switches from concave ${p.type === 'max' ? 'up to concave down' : 'down to concave up'}. Inflection point: ${M(`\\left(${p.tex},\\ ${p.yTex.replace(/^\\approx\s*/, '')}\\right)`)}${p.yTex.startsWith('\\approx') ? ' (approximately)' : ''}.</li>`)).join('');
+
+  // Second Derivative Test for the critical numbers found by the First Derivative Test
+  const fppC = compile(fpp);
+  const sdt = fdt.points.map(p => {
+    const at = M(`${vt} = ${p.tex}`);
+    if (p.kind === 'undef') return `<li><span class="tag neither">does not apply</span>${at}: ${M(`${fName}'`)} is undefined there, so the Second Derivative Test can't be used. Use the First Derivative Test.</li>`;
+    let val = fppC({ [v]: p.x }), tex = fmt(val), exact = false;
+    if (p.node) {
+      try {
+        const e = simplify(substitute(fpp, { [v]: p.node }));
+        if (e.type === 'num') { tex = toTex(e); val = e.n / e.d; exact = true; }
+      } catch { /* keep the decimal */ }
+    }
+    if (!exact && Math.abs(val) < 1e-9) { val = 0; tex = '0'; }
+    const value = M(`${d}(${p.tex}) ${exact || tex === '0' ? '=' : '\\approx'} ${tex}`);
+    if (!isFinite(val)) return `<li><span class="tag neither">does not apply</span>${at}: ${value} is undefined. Use the First Derivative Test.</li>`;
+    if (val > 0) return `<li><span class="tag min">local min</span>${at}: ${value} &gt; 0, so ${esc(F)} is concave up there and has a <b>local minimum</b>.</li>`;
+    if (val < 0) return `<li><span class="tag max">local max</span>${at}: ${value} &lt; 0, so ${esc(F)} is concave down there and has a <b>local maximum</b>.</li>`;
+    return `<li><span class="tag neither">inconclusive</span>${at}: ${value}, so the Second Derivative Test gives no answer. The First Derivative Test says: ${p.type === 'neither' ? 'neither' : `local ${p.type}`}.</li>`;
+  }).join('');
+
+  card.innerHTML = `${cardHead('Second Derivative Test: Concavity')}${notes}` +
+    stageHTML(1, 'Find the second derivative',
+      `<p>Differentiate ${M(`${fName}'(${vt})`)} again:</p>
+      <div class="math-line">${M(`${Fpp} = ${toTex(fpp)}`, true)}</div>
+      <details class="mini"><summary>Steps</summary><div class="steps">${stepTree(d2steps, v, 0)}</div></details>`, true) +
+    stageHTML(2, 'Find the possible inflection points', cand) +
+    stageHTML(3, `Make a sign chart for ${M(d)}`,
+      `<p>Pick a test value in each interval. Where ${M(`${d} > 0`)} the graph is <b>concave up</b> (∪, holds water); where ${M(`${d} < 0`)} it is <b>concave down</b> (∩).</p>${numline}${table}`) +
+    stageHTML(4, 'Concavity and inflection points',
+      `<ul class="conclusions">
+        <li><span class="tag up">concave up</span>${esc(F)} is concave up on ${cup(c.increasing)}</li>
+        <li><span class="tag down">concave down</span>${esc(F)} is concave down on ${cup(c.decreasing)}</li>
+        ${infl}
+      </ul>${c.points.length ? '' : '<p>There are no inflection points.</p>'}`) +
+    stageHTML(5, 'Second Derivative Test for local extrema',
+      fdt.points.length
+        ? `<p>At each critical number ${M('c')} where ${M(`${fName}'(c) = 0`)}: if ${M(`${d}(c) > 0`)} there is a local min; if ${M(`${d}(c) < 0`)} a local max; if ${M(`${d}(c) = 0`)} the test is inconclusive.</p><ul class="conclusions">${sdt}</ul>`
+        : '<p>There are no critical numbers, so there is nothing to test.</p>');
+  card.hidden = false;
 }
 
 // ---------- second derivative ----------
@@ -386,6 +496,7 @@ function runImplicit(equation, v, deps, letters) {
   const r = differentiateEquation(equation, v, deps);
   const vt = symTex(v);
   state.current = { kind: 'implicit', equation, v, deps, r };
+  $('concavity-card').hidden = true;
   $('second').hidden = true;
   $('second-out').innerHTML = '';
 
@@ -594,18 +705,23 @@ function init() {
     }
   });
   $('analysis-card').addEventListener('input', e => { if (e.target.dataset.eval) updateEval(); });
-  $('analysis-card').addEventListener('click', e => {
-    if (e.target.id !== 'expand-stages') return;
-    const stages = [...$('analysis-card').querySelectorAll('details.stage')];
+  document.addEventListener('click', e => {
+    if (!e.target.classList.contains('expand-stages')) return;
+    const stages = [...e.target.closest('.card').querySelectorAll('details.stage')];
     const open = !stages.every(d => d.open);
     stages.forEach(d => { d.open = open; });
     e.target.textContent = open ? 'Collapse all' : 'Expand all';
   });
-  $('analysis-card').addEventListener('toggle', e => {
-    const btn = $('expand-stages');
-    if (btn && e.target.matches('details.stage'))
-      btn.textContent = [...$('analysis-card').querySelectorAll('details.stage')].every(d => d.open) ? 'Collapse all' : 'Expand all';
+  document.addEventListener('toggle', e => {
+    if (!e.target.matches || !e.target.matches('details.stage')) return;
+    const card = e.target.closest('.card'), btn = card && card.querySelector('.expand-stages');
+    if (btn) btn.textContent = [...card.querySelectorAll('details.stage')].every(d => d.open) ? 'Collapse all' : 'Expand all';
   }, true);
+  $('color-by').addEventListener('change', e => {
+    graph.colorBy = e.target.value;
+    if (state.current && state.current.fName) setLegend(state.current.fName);
+    graph.draw();
+  });
 
   $('zoom-in').addEventListener('click', () => graph.zoom(1 / 1.4));
   $('zoom-out').addEventListener('click', () => graph.zoom(1.4));

@@ -252,6 +252,7 @@ export function intervalTex(iv) {
 }
 
 // Main entry. f and fp contain only the variable v. opts.interval = [a, b] or null.
+// The same analysis runs on f'' for concavity: pass fpp as `fp` and opts.prime = '″'.
 export function analyze(f, fp, v, opts = {}) {
   const fC = compile(f), fpC = compile(fp);
   const F = x => fC({ [v]: x }), FP = x => fpC({ [v]: x });
@@ -392,9 +393,10 @@ export function analyze(f, fp, v, opts = {}) {
     : pieces.length === 1 && pieces[0].l.x === -Infinity && pieces[0].r.x === Infinity
     ? '(-\\infty, \\infty)' : pieces.map(intervalTex).join(' \\cup ');
 
-  if (truncated) notes.push(`f′ = 0 at infinitely many (or a great many) x-values here, and they crowd together, so we analyze the ${cands.length} closest to x = ${fmt(center)}, on the window ${fmt(W[0])} < x < ${fmt(W[1])}. Use "Analyze on an interval" to look at a different stretch.`);
-  else if (mode === 'window') notes.push('This function contains trig functions, which repeat forever, so there are infinitely many critical points. We analyze one window, -2π ≤ x ≤ 2π. Use "Analyze on interval" to choose a different window.');
-  if (mode === 'search' && !truncated) notes.push('These critical points were found numerically by searching from x = ' + fmt(W[0]) + ' to x = ' + fmt(W[1]) + '. Values marked ≈ are decimal approximations.');
+  const prime = opts.prime || '′', word = opts.pointWord || 'critical points';
+  if (truncated) notes.push(`f${prime} = 0 at infinitely many (or a great many) x-values here, and they crowd together, so we analyze the ${cands.length} closest to x = ${fmt(center)}, on the window ${fmt(W[0])} < x < ${fmt(W[1])}. Use "Analyze on an interval" to look at a different stretch.`);
+  else if (mode === 'window') notes.push(`This function contains trig functions, which repeat forever, so there are infinitely many ${word}. We analyze one window, -2π ≤ x ≤ 2π. Use "Analyze on an interval" to choose a different window.`);
+  if (mode === 'search' && !truncated) notes.push(`These ${word} were found numerically by searching from x = ${fmt(W[0])} to x = ${fmt(W[1])}. Values marked ≈ are decimal approximations.`);
   if (mode === 'interval' && !truncated) notes.push(`Analysis restricted to the interval [${fmt(W[0])}, ${fmt(W[1])}].`);
 
   return {

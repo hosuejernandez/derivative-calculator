@@ -11,6 +11,10 @@
   --dec: #dc2626;
   --dec-soft: #fee2e2;
   --deriv: #7c3aed;
+  --up: #2563eb;
+  --up-soft: #dbeafe;
+  --down: #db2777;
+  --down-soft: #fce7f3;
   --warn-soft: #fef3c7;
   --radius: 12px;
 }
@@ -184,6 +188,8 @@ details.stage[open] > summary { border-bottom: 1px solid var(--border); border-r
 }
 .numline .seg.pos { background: var(--inc-soft); border-color: var(--inc); color: var(--inc); }
 .numline .seg.neg { background: var(--dec-soft); border-color: var(--dec); color: var(--dec); }
+.numline .seg.cup { background: var(--up-soft); border-color: var(--up); color: var(--up); }
+.numline .seg.cap { background: var(--down-soft); border-color: var(--down); color: var(--down); }
 .numline .seg.zero { background: #f1f5f9; border-color: var(--muted); color: var(--muted); }
 .numline .seg .sgn { font-size: 1.3rem; }
 .numline .seg .tv { font-size: 0.75rem; font-weight: 500; color: var(--muted); }
@@ -197,6 +203,8 @@ table.signs { border-collapse: collapse; margin: 8px 0; font-size: 0.95rem; min-
 table.signs th, table.signs td { border: 1px solid var(--border); padding: 6px 10px; text-align: center; }
 table.signs th { background: #f8fafc; text-align: left; font-weight: 600; }
 table.signs td.pos { color: var(--inc); font-weight: 700; }
+table.signs td.cup { color: var(--up); font-weight: 700; }
+table.signs td.cap { color: var(--down); font-weight: 700; }
 table.signs td.neg { color: var(--dec); font-weight: 700; }
 .table-wrap { overflow-x: auto; }
 
@@ -207,6 +215,12 @@ ul.conclusions li { margin: 4px 0; }
 .tag.dec { background: var(--dec-soft); color: var(--dec); }
 .tag.max { background: #e0e7ff; color: #3730a3; }
 .tag.min { background: #fae8ff; color: #86198f; }
+.tag.up { background: var(--up-soft); color: var(--up); }
+.tag.down { background: var(--down-soft); color: var(--down); }
+.tag.infl { background: #ede9fe; color: #6d28d9; }
+.legend i.ring { width: 12px; height: 12px; border-radius: 50%; border: 2.5px solid #7c3aed; background: #fff; }
+details.mini { margin: 6px 0; }
+details.mini > summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 0.92rem; }
 .tag.neither { background: #f1f5f9; color: var(--muted); }
 
 .eval-grid { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 8px 0; align-items: center; }

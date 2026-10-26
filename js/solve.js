@@ -193,7 +193,8 @@ function quadraticRoots(p) {
     const node = simplify(add([num(B, A), mul([num(s * K, A), pow(num(m), HALF)])]));
     const surd = `${K === 1 ? '' : K}\\sqrt{${m}}`;
     const top = B === 0 ? `${s < 0 ? '-' : ''}${surd}` : `${B} ${s < 0 ? '-' : '+'} ${surd}`;
-    const tex = A === 1 ? top : `\\frac{${top}}{${A}}`;
+    const tex = A === 1 ? top
+      : B === 0 ? `${s < 0 ? '-' : ''}\\frac{${surd}}{${A}}` : `\\frac{${top}}{${A}}`;
     return { x: (B + s * K * Math.sqrt(m)) / A, tex, node, exact: true };
   });
 }

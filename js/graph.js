@@ -2,7 +2,7 @@
 // a tangent line that follows the pointer, and implicit curves F(x, y) = 0.
 
 const COLORS = {
-  inc: '#15803d', dec: '#dc2626', flat: '#64748b', deriv: '#7c3aed', curve: '#2563eb',
+  inc: '#15803d', dec: '#dc2626', up: '#2563eb', down: '#db2777', infl: '#7c3aed', flat: '#64748b', deriv: '#7c3aed', curve: '#2563eb',
   grid: '#e5e7eb', axis: '#475569', text: '#334155', tangent: '#f59e0b', point: '#0f172a',
 };
 
@@ -30,6 +30,7 @@ export class Graph {
     this.hover = null;
     this.showDeriv = false;
     this.showTangent = true;
+    this.colorBy = 'slope';
     this.names = { x: 'x', y: 'y' };
     this.bindEvents();
     new ResizeObserver(() => this.draw()).observe(canvas);
@@ -37,8 +38,8 @@ export class Graph {
 
   // ----- data -----
 
-  setExplicit({ f, fp, points = [], window = null, xName = 'x', fName = 'f' }) {
-    this.data = { kind: 'explicit', f, fp, points };
+  setExplicit({ f, fp, fpp = null, points = [], inflections = [], window = null, xName = 'x', fName = 'f' }) {
+    this.data = { kind: 'explicit', f, fp, fpp, points, inflections };
     this.names = { x: xName, f: fName };
     this.home = this.autoView(window);
     this.view = { ...this.home };
@@ -59,7 +60,8 @@ export class Graph {
   clear() { this.data = null; this.draw(); }
 
   autoView(window) {
-    const { f, points } = this.data;
+    const { f } = this.data;
+    const points = [...this.data.points, ...(this.data.inflections || [])];
     let x0 = -10, x1 = 10;
     // the y-range is chosen from the "interesting" part of the graph, near the critical points
     let c0 = -5, c1 = 5;
@@ -222,21 +224,33 @@ export class Graph {
   }
 
   drawExplicit() {
-    const { f, fp, points } = this.data;
+    const { f, fp, fpp, points, inflections } = this.data;
     const ctx = this.ctx;
+    const byConcavity = this.colorBy === 'concavity' && fpp;
     if (this.showDeriv) this.plot(fp, () => COLORS.deriv, 2, [6, 5]);
-    this.plot(f, (a, b) => { const s = fp((a + b) / 2); return s > 1e-12 ? COLORS.inc : s < -1e-12 ? COLORS.dec : COLORS.flat; }, 3);
+    this.plot(f, (a, b) => {
+      const s = (byConcavity ? fpp : fp)((a + b) / 2);
+      if (byConcavity) return s > 1e-12 ? COLORS.up : s < -1e-12 ? COLORS.down : COLORS.flat;
+      return s > 1e-12 ? COLORS.inc : s < -1e-12 ? COLORS.dec : COLORS.flat;
+    }, 3);
     // critical points
     ctx.font = '600 12px system-ui, sans-serif';
     const placed = [];
-    for (const p of points) {
+    const marks = [...points.map(p => ({ ...p, infl: false })), ...inflections.map(p => ({ ...p, infl: true }))];
+    for (const p of marks) {
       if (!isFinite(p.y)) continue;
       const X = this.sx(p.x), Y = this.sy(p.y);
-      ctx.fillStyle = COLORS.point;
-      ctx.beginPath(); ctx.arc(X, Y, 5, 0, 2 * Math.PI); ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-      const label = `${p.type === 'max' ? 'local max' : p.type === 'min' ? 'local min' : 'critical pt'} (${fmtNum(p.x)}, ${fmtNum(p.y)})`;
-      const above = p.type !== 'min';
+      if (p.infl) {
+        ctx.fillStyle = '#fff'; ctx.strokeStyle = COLORS.infl; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(X, Y, 5.5, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+      } else {
+        ctx.fillStyle = COLORS.point;
+        ctx.beginPath(); ctx.arc(X, Y, 5, 0, 2 * Math.PI); ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+      }
+      const kind = p.infl ? 'inflection' : p.type === 'max' ? 'local max' : p.type === 'min' ? 'local min' : 'critical pt';
+      const label = `${kind} (${fmtNum(p.x)}, ${fmtNum(p.y)})`;
+      const above = p.infl ? p.type === 'min' : p.type !== 'min';
       // crowded points keep their dots but skip labels that would overlap
       const LY = above ? Y - 12 : Y + 20, w = ctx.measureText(label).width + 10;
       const LX = Math.min(Math.max(X, w / 2 + 2), this.W - w / 2 - 2);
@@ -260,7 +274,11 @@ export class Graph {
         ctx.beginPath(); ctx.arc(this.sx(x), this.sy(y), 5, 0, 2 * Math.PI); ctx.fill();
         const trend = !isFinite(m) ? 'slope undefined' : m > 1e-9 ? 'increasing ↗' : m < -1e-9 ? 'decreasing ↘' : 'flat (slope 0)';
         const { x: xn, f: fn } = this.names;
-        this.setReadout(`${xn} = ${fmtNum(x)}   ${fn}(${xn}) = ${fmtNum(y)}   slope ${fn}′(${xn}) = ${fmtNum(m)}   → ${trend}`);
+        if (byConcavity) {
+          const k = fpp(x);
+          const shape = !isFinite(k) ? 'f″ undefined' : k > 1e-9 ? 'concave up ∪' : k < -1e-9 ? 'concave down ∩' : 'f″ = 0';
+          this.setReadout(`${xn} = ${fmtNum(x)}   ${fn}(${xn}) = ${fmtNum(y)}   slope = ${fmtNum(m)}   ${fn}″(${xn}) = ${fmtNum(k)}   → ${shape}`);
+        } else this.setReadout(`${xn} = ${fmtNum(x)}   ${fn}(${xn}) = ${fmtNum(y)}   slope ${fn}′(${xn}) = ${fmtNum(m)}   → ${trend}`);
         return;
       }
     }
