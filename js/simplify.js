@@ -202,6 +202,9 @@ function sFn(name, a) {
   }
   const t = trigExact(name, a);
   if (t) return t;
+  // |e| = e, |pi| = pi, |e^x| = e^x
+  if (name === 'abs' && ((a.type === 'sym' && (a.name === 'e' || a.name === 'pi')) ||
+    (a.type === 'pow' && a.base.type === 'sym' && a.base.name === 'e'))) return a;
   if (name === 'ln' && a.type === 'sym' && a.name === 'e') return num(1);
   if (name === 'ln' && a.type === 'pow' && a.base.type === 'sym' && a.base.name === 'e') return a.exp;
   return fn(name, a);

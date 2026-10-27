@@ -108,9 +108,9 @@ export function substitute(n, map) {
 const FUNCS = new Set(['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'asin', 'acos', 'atan',
   'arcsin', 'arccos', 'arctan', 'ln', 'log', 'sqrt', 'cbrt', 'exp', 'abs']);
 // Longest names first so "arcsin" wins over "sin" and "sqrt" over "s".
-const NAMES = ['arcsin', 'arccos', 'arctan', 'theta', 'alpha', 'sqrt', 'cbrt', 'asin', 'acos', 'atan',
+const NAMES = ['arcsin', 'arccos', 'arctan', 'theta', 'alpha', 'sqrt', 'rho', 'cbrt', 'asin', 'acos', 'atan',
   'beta', 'sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'exp', 'abs', 'log', 'phi', 'ln', 'pi'];
-const GREEK = { 'π': 'pi', 'θ': 'theta', 'α': 'alpha', 'β': 'beta', 'φ': 'phi' };
+const GREEK = { 'π': 'pi', 'θ': 'theta', 'α': 'alpha', 'β': 'beta', 'φ': 'phi', 'ρ': 'rho', 'ϕ': 'phi' };
 const INVERSE = { sin: 'asin', cos: 'acos', tan: 'atan' };
 const ALIAS = { arcsin: 'asin', arccos: 'acos', arctan: 'atan' };
 
@@ -126,8 +126,8 @@ function tokenize(src) {
       if (!m) throw new Error(`Unexpected "${c}"`);
       toks.push({ t: 'num', v: m[0] }); i += m[0].length; continue;
     }
-    if (/[a-zA-Zπθαβφ]/.test(c)) {
-      const run = /^[a-zA-Zπθαβφ]+/.exec(s.slice(i))[0];
+    if (/[a-zA-Zπθαβφρϕ]/.test(c)) {
+      const run = /^[a-zA-Zπθαβφρϕ]+/.exec(s.slice(i))[0];
       i += run.length;
       let j = 0;
       while (j < run.length) {
@@ -276,7 +276,7 @@ const FN_TEX = {
   sin: '\\sin', cos: '\\cos', tan: '\\tan', sec: '\\sec', csc: '\\csc', cot: '\\cot',
   asin: '\\arcsin', acos: '\\arccos', atan: '\\arctan', ln: '\\ln', log: '\\log',
 };
-const SYM_TEX = { pi: '\\pi', theta: '\\theta', alpha: '\\alpha', beta: '\\beta', phi: '\\phi' };
+const SYM_TEX = { pi: '\\pi', theta: '\\theta', alpha: '\\alpha', beta: '\\beta', phi: '\\phi', rho: '\\rho' };
 
 export const symTex = name => SYM_TEX[name] || name;
 export const dTex = (of, wrt) => `\\frac{d${symTex(of)}}{d${symTex(wrt)}}`;
@@ -372,7 +372,7 @@ function mulTex(n) {
     if (numer.every(f => f.type === 'sym' || (f.type === 'pow' && f.base.type === 'sym')))
       return `${sign}\\frac{${wrapSum(numer, cn)}}{${cd}}`;
     // pi/3 (r^2 + ...) : letters go on top of the fraction, sums and functions after it
-    const simpleF = f => f.type === 'sym' || (f.type === 'pow' && f.base.type === 'sym');
+    const simpleF = f => f.type === 'sym' || (f.type === 'pow' && (f.base.type === 'sym' || f.base.type === 'num'));
     const top = numer.filter(simpleF), after = numer.filter(f => !simpleF(f));
     const rest = after.length === 1 && after[0].type === 'add'
       ? `\\left(${toTex(after[0])}\\right)` : factorsTex(after);
